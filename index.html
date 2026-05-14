@@ -343,23 +343,10 @@ select.inp{cursor:pointer;-webkit-appearance:none}
       </div>
       <div class="setup-card-body">
         <div class="step-list">
-          <div class="step"><div class="step-num">1</div><div class="step-text">Go to <a href="https://supabase.com" target="_blank">supabase.com</a> → <strong>New Project</strong> (free tier, no card needed)</div></div>
-          <div class="step"><div class="step-num">2</div><div class="step-text">In your project, go to <strong>SQL Editor</strong> and run this to create the watchlist table:</div></div>
-        </div>
-        <div style="background:var(--s3);border-radius:6px;padding:10px 12px;font-family:var(--font-mono);font-size:11px;color:var(--muted2);margin-bottom:12px;line-height:1.6;white-space:pre-wrap">create table watchlist (
-  id uuid default gen_random_uuid() primary key,
-  name text not null,
-  sector text,
-  alerts boolean default true,
-  created_at timestamptz default now()
-);</div>
-        <div class="step-list">
-          <div class="step"><div class="step-num">3</div><div class="step-text">Go to <strong>Project Settings → API</strong> and copy your <strong>Project URL</strong> and <strong>anon public key</strong></div></div>
-        </div>
-        <div class="key-field">
-          <div class="key-label">Project URL</div>
-          <input class="inp" id="sb-url" placeholder="https://xyzabc.supabase.co" oninput="saveKey('sb_url',this.value)"/>
-          <span class="key-status unset" id="status-sb-url">not set</span>
+          <div class="step"><div class="step-num">✓</div><div class="step-text"><strong>Project URL is already configured</strong> — hardcoded to your Supabase project <code>bysiabbygywwagdfrqpm</code></div></div>
+          <div class="step"><div class="step-num">1</div><div class="step-text">Go to <strong>Supabase → Settings → API → Project API keys</strong></div></div>
+          <div class="step"><div class="step-num">2</div><div class="step-text">Copy the <strong>anon public</strong> key (starts with <code>eyJhbGci…</code>)</div></div>
+          <div class="step"><div class="step-num">3</div><div class="step-text">Paste it below and hit Test connection</div></div>
         </div>
         <div class="key-field">
           <div class="key-label">Anon Key</div>
@@ -596,33 +583,50 @@ function apiStatusHTML() {
 // ═══════════════════════════════════════════════════════════════════════════
 // CONNECTION TESTS
 // ═══════════════════════════════════════════════════════════════════════════
+// ── PROXY URLS — all API calls route through Supabase Edge Functions ──────
+// This solves CORS: browser → Supabase proxy → real API → back to browser
+const PROXY = {
+  adzuna: 'https://bysiabbygywwagdfrqpm.supabase.co/functions/v1/adzuna-proxy',
+  ch:     'https://bysiabbygywwagdfrqpm.supabase.co/functions/v1/ch-proxy',
+};
+const SB_URL  = 'https://bysiabbygywwagdfrqpm.supabase.co';
+// Paste your Supabase anon key below between the quotes:
+let SB_ANON   = '';
+
 async function testAdzuna() {
   const el = document.getElementById('test-adzuna-result');
-  el.textContent = 'Testing…'; el.style.color = 'var(--muted2)';
+  el.textContent = 'Testing via proxy…'; el.style.color = 'var(--muted2)';
   const id = getKey('adzuna_app_id'), key = getKey('adzuna_app_key');
   if (!id || !key) { el.textContent = '⚠ Enter App ID and App Key first'; return; }
   try {
-    const url = `https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id=${id}&app_key=${key}&results_per_page=1&what=software+engineer`;
-    const r = await fetch(url);
+    // Calls your Supabase proxy — not Adzuna directly — so no CORS block
+    const r = await fetch(PROXY.adzuna, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_ANON || getKey('sb_anon')}` },
+      body: JSON.stringify({ company: 'software engineer' })
+    });
     const d = await r.json();
-    if (d.results) { el.textContent = `✓ Connected — ${d.count?.toLocaleString()} UK jobs found`; el.style.color='var(--green)'; toast('✓','Adzuna connected!'); }
-    else { el.textContent = '✗ ' + (d.error || 'Invalid credentials'); el.style.color='var(--red)'; }
-  } catch(e) { el.textContent = '✗ Network error — check credentials'; el.style.color='var(--red)'; }
+    if (d.count !== undefined) { el.textContent = `✓ Proxy connected — ${d.count?.toLocaleString()} UK jobs found`; el.style.color='var(--green)'; toast('✓','Adzuna proxy working!'); }
+    else { el.textContent = '✗ Proxy error — ' + JSON.stringify(d); el.style.color='var(--red)'; }
+  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color='var(--red)'; }
 }
 
 async function testCompaniesHouse() {
   const el = document.getElementById('test-ch-result');
-  el.textContent = 'Testing…'; el.style.color = 'var(--muted2)';
+  el.textContent = 'Testing via proxy…'; el.style.color = 'var(--muted2)';
   const key = getKey('ch_api_key');
   if (!key) { el.textContent = '⚠ Enter API key first'; return; }
   try {
-    const r = await fetch('https://api.company-information.service.gov.uk/search/companies?q=monzo&items_per_page=1', {
-      headers: { 'Authorization': 'Basic ' + btoa(key + ':') }
+    // Calls your Supabase proxy — not Companies House directly — so no CORS block
+    const r = await fetch(PROXY.ch, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_ANON || getKey('sb_anon')}` },
+      body: JSON.stringify({ company: 'Monzo' })
     });
     const d = await r.json();
-    if (d.items) { el.textContent = `✓ Connected — ${d.total_results?.toLocaleString()} results for 'monzo'`; el.style.color='var(--green)'; toast('✓','Companies House connected!'); }
-    else { el.textContent = '✗ Auth failed — check your key'; el.style.color='var(--red)'; }
-  } catch(e) { el.textContent = '✗ Network error'; el.style.color='var(--red)'; }
+    if (d.companyName) { el.textContent = `✓ Proxy connected — found ${d.companyName}`; el.style.color='var(--green)'; toast('✓','Companies House proxy working!'); }
+    else { el.textContent = '✗ Proxy error — ' + JSON.stringify(d); el.style.color='var(--red)'; }
+  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color='var(--red)'; }
 }
 
 async function testGdelt() {
@@ -642,60 +646,56 @@ async function testGdelt() {
 async function testSupabase() {
   const el = document.getElementById('test-sb-result');
   el.textContent = 'Testing…'; el.style.color = 'var(--muted2)';
-  const url = getKey('sb_url'), anon = getKey('sb_anon');
-  if (!url || !anon) { el.textContent = '⚠ Enter URL and anon key first'; return; }
+  const anon = getKey('sb_anon');
+  if (!anon) { el.textContent = '⚠ Enter anon key first'; return; }
+  SB_ANON = anon; // store globally so proxies can use it
   try {
-    const r = await fetch(`${url}/rest/v1/watchlist?limit=1`, {
+    const r = await fetch(`${SB_URL}/rest/v1/watchlist?limit=1`, {
       headers: { 'apikey': anon, 'Authorization': `Bearer ${anon}` }
     });
-    if (r.ok) { el.textContent = '✓ Connected to Supabase — watchlist table found'; el.style.color='var(--green)'; toast('✓','Supabase connected!'); }
-    else { el.textContent = `✗ Error ${r.status} — check URL and key, or run the SQL setup`; el.style.color='var(--red)'; }
-  } catch(e) { el.textContent = '✗ Network error — check project URL'; el.style.color='var(--red)'; }
+    if (r.ok) { el.textContent = '✓ Connected to Supabase — watchlist table found'; el.style.color='var(--green)'; toast('✓','Supabase connected!'); updateConnStatus(); }
+    else { el.textContent = `✗ Error ${r.status} — check anon key or run the SQL setup`; el.style.color='var(--red)'; }
+  } catch(e) { el.textContent = '✗ Network error — ' + e.message; el.style.color='var(--red)'; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ADZUNA — fetch real job count for a company
+// ADZUNA — routes through Supabase proxy (no CORS block)
 // ═══════════════════════════════════════════════════════════════════════════
 async function fetchAdzunaCount(companyName) {
   const id = getKey('adzuna_app_id'), key = getKey('adzuna_app_key');
-  if (!id || !key) return null; // fall back to demo
+  if (!id || !key) return null; // fall back to demo data
   try {
-    const q = encodeURIComponent(companyName);
-    const url = `https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id=${id}&app_key=${key}&results_per_page=1&company=${q}`;
-    const r = await fetch(url);
+    const anon = SB_ANON || getKey('sb_anon');
+    const r = await fetch(PROXY.adzuna, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anon}` },
+      body: JSON.stringify({ company: companyName })
+    });
     const d = await r.json();
     return d.count ?? null;
   } catch { return null; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPANIES HOUSE — search company number + recent filings
+// COMPANIES HOUSE — routes through Supabase proxy (no CORS block)
 // ═══════════════════════════════════════════════════════════════════════════
 async function fetchCHSignals(companyName) {
   const key = getKey('ch_api_key');
   if (!key) return null;
   try {
-    // Step 1: find company number
-    const sr = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(companyName)}&items_per_page=1`, {
-      headers:{'Authorization':'Basic '+btoa(key+':')}
+    const anon = SB_ANON || getKey('sb_anon');
+    const r = await fetch(PROXY.ch, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anon}` },
+      body: JSON.stringify({ company: companyName })
     });
-    const sd = await sr.json();
-    const co = sd.items?.[0];
-    if (!co) return null;
-    const num = co.company_number;
-
-    // Step 2: get recent officer appointments (last 3 months = leadership changes)
-    const or = await fetch(`https://api.company-information.service.gov.uk/company/${num}/officers?items_per_page=5`, {
-      headers:{'Authorization':'Basic '+btoa(key+':')}
-    });
-    const od = await or.json();
-    const recent = (od.items||[]).filter(o => {
+    const d = await r.json();
+    if (!d.companyName) return null;
+    const recent = (d.officers||[]).filter(o => {
       if (!o.appointed_on) return false;
-      const d = new Date(o.appointed_on);
-      return (Date.now() - d.getTime()) < 90 * 86400000;
+      return (Date.now() - new Date(o.appointed_on).getTime()) < 90 * 86400000;
     });
-
-    return { companyNumber: num, companyName: co.title, recentOfficers: recent };
+    return { companyNumber: d.companyNumber, companyName: d.companyName, recentOfficers: recent };
   } catch { return null; }
 }
 
@@ -723,10 +723,10 @@ async function fetchGDELTSignals(companyName) {
 // SUPABASE — save/load watchlist
 // ═══════════════════════════════════════════════════════════════════════════
 async function sbSave(company) {
-  const url = getKey('sb_url'), anon = getKey('sb_anon');
-  if (!url || !anon) return;
+  const anon = SB_ANON || getKey('sb_anon');
+  if (!anon) return;
   try {
-    await fetch(`${url}/rest/v1/watchlist`, {
+    await fetch(`${SB_URL}/rest/v1/watchlist`, {
       method:'POST',
       headers:{'apikey':anon,'Authorization':`Bearer ${anon}`,'Content-Type':'application/json','Prefer':'return=minimal'},
       body: JSON.stringify({name:company.name, sector:company.sector, alerts:company.alerts})
@@ -735,10 +735,10 @@ async function sbSave(company) {
 }
 
 async function sbDelete(name) {
-  const url = getKey('sb_url'), anon = getKey('sb_anon');
-  if (!url || !anon) return;
+  const anon = SB_ANON || getKey('sb_anon');
+  if (!anon) return;
   try {
-    await fetch(`${url}/rest/v1/watchlist?name=eq.${encodeURIComponent(name)}`, {
+    await fetch(`${SB_URL}/rest/v1/watchlist?name=eq.${encodeURIComponent(name)}`, {
       method:'DELETE',
       headers:{'apikey':anon,'Authorization':`Bearer ${anon}`}
     });
@@ -746,10 +746,11 @@ async function sbDelete(name) {
 }
 
 async function sbLoad() {
-  const url = getKey('sb_url'), anon = getKey('sb_anon');
-  if (!url || !anon) return [];
+  const anon = SB_ANON || getKey('sb_anon');
+  if (!anon) return [];
   try {
-    const r = await fetch(`${url}/rest/v1/watchlist?order=created_at.asc`, {
+    const anon = SB_ANON || getKey('sb_anon');
+    const r = await fetch(`${SB_URL}/rest/v1/watchlist?order=created_at.asc`, {
       headers:{'apikey':anon,'Authorization':`Bearer ${anon}`}
     });
     return r.ok ? await r.json() : [];
