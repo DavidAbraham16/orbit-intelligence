@@ -552,6 +552,11 @@ function saveKey(k, v) {
 function getKey(k) { return KEYS[k] || ''; }
 
 function loadKeysFromStorage() {
+  // Load hardcoded keys first — always works regardless of browser settings
+  Object.entries(HARDCODED_KEYS).forEach(([k, v]) => {
+    if (v) { KEYS[k] = v; if (k === 'sb_anon') SB_ANON = v; }
+  });
+  // Also try localStorage in case user has updated a key via the Setup page
   const keyNames = ['adzuna_app_id','adzuna_app_key','ch_api_key','sb_anon'];
   keyNames.forEach(k => {
     try {
@@ -559,14 +564,13 @@ function loadKeysFromStorage() {
       if (v) { KEYS[k] = v; if (k === 'sb_anon') SB_ANON = v; }
     } catch(e) {}
   });
-  // Map internal key names → actual HTML input element IDs
+  // Populate Setup page fields so user can see current values
   const fieldMap = {
     'adzuna_app_id':  'adzuna-app-id',
     'adzuna_app_key': 'adzuna-app-key',
     'ch_api_key':     'ch-api-key',
     'sb_anon':        'sb-anon',
   };
-  // Populate fields after DOM is ready
   setTimeout(() => {
     Object.entries(fieldMap).forEach(([k, elId]) => {
       const el = document.getElementById(elId);
@@ -647,8 +651,15 @@ const PROXY = {
   ch:     'https://bysiabbygywwagdfrqpm.supabase.co/functions/v1/ch-proxy',
 };
 const SB_URL  = 'https://bysiabbygywwagdfrqpm.supabase.co';
-// Paste your Supabase anon key below between the quotes:
-let SB_ANON   = '';
+let SB_ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5c2lhYmJ5Z3l3d2FnZGZycXBtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NTA4MTksImV4cCI6MjA5NDMyNjgxOX0.vcXJb9znotxm8I8uUkEiMDw6Xq-d38OENB_AKxN7f6k';
+
+// Hardcoded API keys — loaded automatically on every page open
+const HARDCODED_KEYS = {
+  adzuna_app_id:  '718d6aeb',
+  adzuna_app_key: 'e7b4dc2985e055e5e793119251b404ee',
+  ch_api_key:     '5f8c8223-3697-451c-8d01-0d1ec5cc4bc5',
+  sb_anon:        SB_ANON,
+};
 
 async function testAdzuna() {
   const el = document.getElementById('test-adzuna-result');
