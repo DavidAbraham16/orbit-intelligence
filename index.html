@@ -559,18 +559,22 @@ function loadKeysFromStorage() {
       if (v) { KEYS[k] = v; if (k === 'sb_anon') SB_ANON = v; }
     } catch(e) {}
   });
+  // Map internal key names → actual HTML input element IDs
   const fieldMap = {
-    'adzuna_app_id':'adzuna-app-id',
-    'adzuna_app_key':'adzuna-app-key',
-    'ch_api_key':'ch-api-key',
-    'sb_anon':'sb-anon',
+    'adzuna_app_id':  'adzuna-app-id',
+    'adzuna_app_key': 'adzuna-app-key',
+    'ch_api_key':     'ch-api-key',
+    'sb_anon':        'sb-anon',
   };
-  Object.entries(fieldMap).forEach(([k,elId]) => {
-    const el = document.getElementById(elId);
-    if (el && KEYS[k]) el.value = KEYS[k];
-  });
-  refreshKeyStatuses();
-  updateConnStatus();
+  // Populate fields after DOM is ready
+  setTimeout(() => {
+    Object.entries(fieldMap).forEach(([k, elId]) => {
+      const el = document.getElementById(elId);
+      if (el && KEYS[k]) el.value = KEYS[k];
+    });
+    refreshKeyStatuses();
+    updateConnStatus();
+  }, 100);
 }
 
 function refreshKeyStatuses() {
@@ -578,8 +582,7 @@ function refreshKeyStatuses() {
     'adzuna_app_id':  ['status-adzuna-id',  'dot-adzuna'],
     'adzuna_app_key': ['status-adzuna-key', null],
     'ch_api_key':     ['status-ch',         'dot-ch'],
-    'sb_url':         ['status-sb-url',     'dot-sb'],
-    'sb_anon':        ['status-sb-anon',    null],
+    'sb_anon':        ['status-sb-anon',    'dot-sb'],
   };
   for (const [k, [statusId, dotId]] of Object.entries(fields)) {
     const el = document.getElementById(statusId);
@@ -609,7 +612,7 @@ function clearSavedKeys() {
 }
   const az = getKey('adzuna_app_id') && getKey('adzuna_app_key');
   const ch = getKey('ch_api_key');
-  const sb = getKey('sb_url') && getKey('sb_anon');
+  const sb = getKey('sb_anon');
   const count = [az,ch,sb].filter(Boolean).length + 1; // GDELT always live
   const el = document.getElementById('conn-status');
   const lbl = document.getElementById('conn-label');
@@ -621,7 +624,7 @@ function clearSavedKeys() {
 function apiStatusHTML() {
   const az = getKey('adzuna_app_id') && getKey('adzuna_app_key');
   const ch = getKey('ch_api_key');
-  const sb = getKey('sb_url') && getKey('sb_anon');
+  const sb = getKey('sb_anon');
   return `
     <span style="font-size:11px;color:var(--muted2);font-family:var(--font-mono)">Sources:</span>
     <span class="api-ind"><span class="api-dot ${az?'live':'demo'}"></span>Adzuna ${az?'(live)':'(demo)'}</span>
@@ -909,7 +912,7 @@ function removeCompany(idx) {
 function renderWatchlist() {
   const el = document.getElementById('co-list');
   // API dots
-  const az = getKey('adzuna_app_id')&&getKey('adzuna_app_key'), ch=getKey('ch_api_key'), sb=getKey('sb_url')&&getKey('sb_anon');
+  const az = getKey('adzuna_app_id')&&getKey('adzuna_app_key'), ch=getKey('ch_api_key'), sb=getKey('sb_anon');
   document.getElementById('wl-api-dots').innerHTML = `
     <span class="api-ind" style="font-size:10px"><span class="api-dot ${az?'live':'demo'}"></span>Adzuna</span>
     <span class="api-ind" style="font-size:10px"><span class="api-dot ${ch?'live':'demo'}"></span>CH</span>
