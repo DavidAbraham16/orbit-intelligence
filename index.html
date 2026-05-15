@@ -536,14 +536,42 @@ const SIG_META = {
   expansion: {icon:'🌍', bg:'var(--amber-dim)',  pill:'pill-amber',  label:'Expansion'},
 };
 
-// Keys (sessionStorage — not localStorage per artifact rules)
+// Keys — stored in localStorage so they persist across page refreshes
 const KEYS = {};
+const LS_PREFIX = 'orbit_key_';
+
 function saveKey(k, v) {
-  KEYS[k] = v.trim();
+  const val = v.trim();
+  KEYS[k] = val;
+  try { localStorage.setItem(LS_PREFIX + k, val); } catch(e) {}
+  if (k === 'sb_anon') SB_ANON = val;
   refreshKeyStatuses();
   updateConnStatus();
 }
+
 function getKey(k) { return KEYS[k] || ''; }
+
+function loadKeysFromStorage() {
+  const keyNames = ['adzuna_app_id','adzuna_app_key','ch_api_key','sb_anon'];
+  keyNames.forEach(k => {
+    try {
+      const v = localStorage.getItem(LS_PREFIX + k);
+      if (v) { KEYS[k] = v; if (k === 'sb_anon') SB_ANON = v; }
+    } catch(e) {}
+  });
+  const fieldMap = {
+    'adzuna_app_id':'adzuna-app-id',
+    'adzuna_app_key':'adzuna-app-key',
+    'ch_api_key':'ch-api-key',
+    'sb_anon':'sb-anon',
+  };
+  Object.entries(fieldMap).forEach(([k,elId]) => {
+    const el = document.getElementById(elId);
+    if (el && KEYS[k]) el.value = KEYS[k];
+  });
+  refreshKeyStatuses();
+  updateConnStatus();
+}
 
 function refreshKeyStatuses() {
   const fields = {
@@ -563,7 +591,22 @@ function refreshKeyStatuses() {
   }
 }
 
-function updateConnStatus() {
+function clearSavedKeys() {
+  if (!confirm('Clear all saved API keys from this browser?')) return;
+  ['adzuna_app_id','adzuna_app_key','ch_api_key','sb_anon'].forEach(k => {
+    try { localStorage.removeItem(LS_PREFIX + k); } catch(e) {}
+    KEYS[k] = '';
+    SB_ANON = '';
+  });
+  // Clear input fields
+  ['adzuna-app-id','adzuna-app-key','ch-api-key','sb-anon'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  refreshKeyStatuses();
+  updateConnStatus();
+  toast('🗑', 'All saved keys cleared');
+}
   const az = getKey('adzuna_app_id') && getKey('adzuna_app_key');
   const ch = getKey('ch_api_key');
   const sb = getKey('sb_url') && getKey('sb_anon');
@@ -968,12 +1011,35 @@ function filterSigs(type, btn) {
 
 function renderSignals(filter) {
   const el=document.getElementById('sig-grid');
-  if(watchlist.length===0){ el.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted2);font-size:13px;background:var(--s1);border-radius:var(--radius);border:1px solid var(--border)">Add companies to your watchlist to see signals here</div>'; return; }
+  if(watchlist.length===0){ el.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted);font-size:13px;background:var(--s1);border-radius:var(--radius);border:1px solid var(--border)">Add companies to your watchlist to see signals here</div>'; return; }
   const list=filter==='all'?signals:signals.filter(s=>s.type===filter);
-  if(!list.length){ el.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted2);font-size:13px;background:var(--s1);border-radius:var(--radius);border:1px solid var(--border)">No '+filter+' signals yet for your watchlist</div>'; return; }
+  if(!list.length){ el.innerHTML='<div style="padding:36px;text-align:center;color:var(--muted);font-size:13px;background:var(--s1);border-radius:var(--radius);border:1px solid var(--border)">No '+filter+' signals yet for your watchlist</div>'; return; }
   el.innerHTML=list.map(s=>{
     const m=SIG_META[s.type]||SIG_META.news;
     const isLive=s.source&&!s.source.includes('demo');
+
+    // Build the best link available:
+    // 1. Direct article URL (GDELT / Companies House live signals)
+    // 2. Google News search for the headline (demo signals)
+    // 3. Google News search for company + signal type (fallback)
+    let linkHref, linkLabel;
+    if (s.url) {
+      linkHref = s.url;
+      linkLabel = 'View source ↗';
+    } else {
+      const searchQuery = s.headline
+        ? encodeURIComponent(s.headline)
+        : encodeURIComponent(`${s.company} ${m.label}`);
+      linkHref = `https://news.google.com/search?q=${searchQuery}`;
+      linkLabel = 'Search for articles ↗';
+    }
+
+    // Companies House direct link for filing signals
+    if (s.type === 'filing' && s.url) {
+      linkHref = s.url;
+      linkLabel = 'View on Companies House ↗';
+    }
+
     return `<div class="sig-card">
       <div class="sig-type-icon" style="background:${m.bg}">${m.icon}</div>
       <div class="sig-body">
@@ -984,7 +1050,7 @@ function renderSignals(filter) {
         </div>
         <div class="sig-headline">${s.headline}</div>
         <div class="sig-detail">${s.detail}</div>
-        ${s.url?`<a class="sig-link" href="${s.url}" target="_blank" rel="noopener">View source ↗</a>`:''}
+        <a class="sig-link" href="${linkHref}" target="_blank" rel="noopener">${linkLabel}</a>
       </div>
       <div class="sig-meta">
         <span class="sig-time">${s.ago}</span>
@@ -1093,9 +1159,13 @@ function toast(icon,msg){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// INIT — seed 3 companies so dashboard isn't empty
+// INIT
 // ═══════════════════════════════════════════════════════════════════════════
 (async()=>{
+  // 1. Restore saved API keys from localStorage — no re-entering needed
+  loadKeysFromStorage();
+
+  // 2. Seed demo companies so dashboard isn't empty on first load
   const seeds=[{name:'Monzo',sector:'Fintech'},{name:'Palantir',sector:'AI / ML'},{name:'Deliveroo',sector:'E-commerce'}];
   for(const s of seeds){
     const idx=watchlist.length;
@@ -1106,8 +1176,16 @@ function toast(icon,msg){
   }
   renderWatchlist(); renderOverview(); renderSignals('all');
   triggerSuggestions();
-  // Kick off setup page as active initially to prompt users to add keys
-  showPage('setup', document.querySelectorAll('.h-tab')[3]);
+
+  // 3. If keys already saved, go straight to Overview — skip Setup page
+  const hasKeys = getKey('sb_anon') || getKey('adzuna_app_id');
+  if (hasKeys) {
+    showPage('overview', document.querySelectorAll('.h-tab')[0]);
+    toast('✓', 'API keys loaded — all connections restored');
+  } else {
+    // First time — show Setup to prompt key entry
+    showPage('setup', document.querySelectorAll('.h-tab')[3]);
+  }
 })();
 </script>
 </body>
